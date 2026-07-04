@@ -1,4 +1,31 @@
+---
+project: Portfolio Dashboard
+status: active
+last_updated: 2026-07-04
+next_milestone: Verify FX in-browser against live ISA data
+repo: https://github.com/silkham/Investing
+live_url: https://silkham.github.io/Investing/
+---
+
 # CLAUDE.md — Portfolio Intelligence Dashboard
+
+<!-- The Status and Roadmap sections below are read by the Project Dashboard.
+     Keep them current: Status = where it is now, Roadmap = what's planned.
+     Changelog is pulled live from git commit history, so don't maintain one here. -->
+
+## Status
+Backend is live on the shared `realestate` Supabase project and the full pipeline
+returns real ISA data end-to-end: T212 positions + account summary through a
+read-only proxy, allocation/drift rails, and FX conversion of non-GBP holdings to
+GBP via keyless ECB rates. FX is deployed and shape-verified but not yet eyeballed
+against live data in-browser. v0.1 (read-only dashboard) is functionally complete.
+
+## Roadmap
+- [ ] Verify FX in-browser against live ISA data (US names' GBP value, satellite %, ccy badge)
+- [ ] Add PWA icons `icon-192.png` / `icon-512.png` (manifest references them; missing)
+- [ ] v0.2: editable allocation targets + per-holding thesis UI (schema already exists)
+- [ ] v0.2: cost & turnover tracker + trade log
+- [ ] v0.3: research enrichment per held ticker (consensus, earnings, insider activity)
 
 ## Your role
 
