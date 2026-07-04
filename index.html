@@ -119,7 +119,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // See SETUP.md.
 // ============================================================================
 const SUPABASE_URL = "https://wqkhjbmsciuhwdqsdsni.supabase.co";
-const SUPABASE_ANON_KEY = "__SUPABASE_ANON_KEY__";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxa2hqYm1zY2l1aHdkcXNkc25pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5NzkzMTMsImV4cCI6MjA5NzU1NTMxM30.cAWtGGE42k_GeSQRE1ZnFZIXK2EOat35-xnaF2Gczsc";
 
 const CONFIGURED = !SUPABASE_URL.startsWith("__");
 const sb = CONFIGURED ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
