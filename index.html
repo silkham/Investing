@@ -69,8 +69,13 @@
 
   /* ---- Section ---- */
   section { margin-bottom: 40px; }
-  section > h2 { font-size: 13px; font-weight:600; text-transform: uppercase;
+  section h2 { font-size: 13px; font-weight:600; text-transform: uppercase;
                  letter-spacing:.06em; color: var(--muted); margin: 0 0 14px; }
+  .sec-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .sec-head h2 { margin:0; }
+  .editbtn { background:none; border:1px solid var(--line); color:var(--muted);
+             border-radius:999px; padding:3px 11px; font-size:12px; }
+  .editbtn:hover { color:var(--ink); border-color:var(--muted); }
 
   /* ---- Holdings table ---- */
   .holdings { width:100%; border-collapse: collapse; }
@@ -108,10 +113,53 @@
   .auth button { padding:11px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-weight:600; }
   .auth .err { color:var(--neg); font-size:13px; min-height: 1em; }
   .brand { font-size:20px; font-weight:700; letter-spacing:-.01em; }
+
+  /* ---- Thesis affordances on holdings ---- */
+  .holdings tr.clickable { cursor:pointer; }
+  .holdings tr.clickable:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .chip { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px;
+          font-size:10px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; vertical-align:1px; }
+  .chip.core      { background: color-mix(in srgb, var(--accent) 15%, transparent); color:var(--accent); }
+  .chip.satellite { background: color-mix(in srgb, var(--warn) 18%, transparent);   color:var(--warn); }
+  .chip.fun       { background: color-mix(in srgb, var(--muted) 18%, transparent);  color:var(--muted); }
+  .thesis-dot { margin-left:6px; color:var(--accent); font-size:10px; vertical-align:1px; }
+  .addnote { margin-left:6px; color:var(--muted); font-size:11px; opacity:.65; font-weight:400; }
+
+  /* ---- Modal ---- */
+  .overlay { position:fixed; inset:0; background:rgba(20,23,20,.42); z-index:50;
+             display:flex; align-items:flex-end; justify-content:center; padding:0; }
+  @media (min-width:620px){ .overlay { align-items:center; padding:20px; } }
+  .dialog { background:var(--surface); border:1px solid var(--line);
+            border-radius:16px 16px 0 0; width:min(460px,100%); max-height:92vh; overflow:auto;
+            padding:22px; box-shadow:0 12px 40px rgba(0,0,0,.22); }
+  @media (min-width:620px){ .dialog { border-radius:16px; } }
+  .dialog h3 { margin:0 0 4px; font-size:17px; font-weight:600; }
+  .dialog .hint { color:var(--muted); font-size:12.5px; margin:0 0 18px; line-height:1.5; }
+  .field { margin-bottom:16px; }
+  .field > label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500; }
+  .field input[type=number], .field textarea {
+    width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line);
+    border-radius:10px; background:var(--bg); color:var(--ink); }
+  .field textarea { resize:vertical; min-height:66px; line-height:1.5; }
+  .field .sub { font-size:11px; color:var(--muted); margin-top:5px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .seg { display:flex; gap:6px; }
+  .seg button { flex:1; padding:8px 4px; border:1px solid var(--line); border-radius:9px;
+                background:var(--bg); color:var(--muted); font-size:13px; font-weight:500; }
+  .seg button.on { border-color:var(--accent); color:var(--accent);
+                   background:color-mix(in srgb, var(--accent) 9%, transparent); }
+  .seg button:disabled { opacity:.5; cursor:default; }
+  .dialog-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:8px; }
+  .btn-primary { padding:10px 18px; border:none; border-radius:10px; background:var(--accent);
+                 color:#fff; font-weight:600; font-size:14px; }
+  .btn-primary:disabled { opacity:.6; }
+  .btn-ghost { padding:10px 16px; border:1px solid var(--line); border-radius:10px;
+               background:none; color:var(--muted); font-size:14px; }
 </style>
 </head>
 <body>
 <div class="wrap" id="app"><!-- rendered by JS --></div>
+<div id="modalHost"></div>
 
 <script type="module">
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -134,6 +182,7 @@ const fmtPct = (n) => (n == null || isNaN(n)) ? "—" : `${n.toFixed(1)}%`;
 const signed = (n) => (n == null || isNaN(n)) ? "—" :
   (n >= 0 ? "+" : "−") + fmtGBP(Math.abs(n)).replace("£","£");
 const timeHHMM = (iso) => { try { return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); } catch { return "—"; } };
+const esc = (s) => (s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 
 // ---- App state ----
 const state = { session:null, summary:null, positions:[], settings:null, theses:{},
@@ -305,11 +354,21 @@ function renderDashboard() {
     </section>
 
     <section>
-      <h2>Allocation &amp; drift</h2>
+      <div class="sec-head">
+        <h2>Allocation &amp; drift</h2>
+        ${state.positions.length ? `<button class="editbtn" id="editTargets">Edit targets</button>` : ""}
+      </div>
       ${renderAllocation()}
     </section>
   `;
   document.getElementById("refreshBtn").addEventListener("click", refresh);
+  const et = document.getElementById("editTargets");
+  if (et) et.addEventListener("click", openTargetsModal);
+  app.querySelectorAll("tr[data-ticker]").forEach(tr => {
+    const open = () => openThesisModal(tr.dataset.ticker);
+    tr.addEventListener("click", open);
+    tr.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
 }
 
 function renderHoldings() {
@@ -317,12 +376,20 @@ function renderHoldings() {
     return `<div class="card empty">No positions yet. Once the T212 proxy is wired, your ISA
             holdings appear here automatically — no manual entry.</div>`;
   }
-  const rows = state.positions.map(p => `
-    <tr>
-      <td class="tk">${p.ticker}${p.foreign?`<span class="ccy">${p.ccy}</span>`:""}<span class="sub">${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
+  const rows = state.positions.map(p => {
+    const sleeve = sleeveOf(p.ticker);
+    const th = state.theses[p.ticker];
+    const hasThesis = !!(th && (th.thesis || th.prove_me_wrong));
+    const chip = `<span class="chip ${sleeve}">${sleeve}</span>`;
+    const note = hasThesis
+      ? `<span class="thesis-dot" title="Thesis recorded">●</span>`
+      : `<span class="addnote">+ note</span>`;
+    return `
+    <tr class="clickable" data-ticker="${esc(p.ticker)}" tabindex="0" role="button" aria-label="Edit thesis for ${esc(p.ticker)}">
+      <td class="tk">${p.ticker}${p.foreign?`<span class="ccy">${p.ccy}</span>`:""}${chip}${note}<span class="sub">${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
       <td class="num">${fmtGBP(p.value)}</td>
       <td class="num ${p.ppl>=0?'pos':'neg'}">${signed(p.ppl)}</td>
-    </tr>`).join("");
+    </tr>`; }).join("");
   const anyForeign = state.positions.some(p => p.foreign);
   const fxNote = anyForeign
     ? `<div class="muted fxnote">Foreign holdings converted to GBP at ECB reference rates${state.fxDate?` (${state.fxDate})`:""}.</div>`
@@ -376,6 +443,120 @@ function renderAllocation() {
     : "";
 
   return railHTML + concentration;
+}
+
+// ============================================================================
+// Modals — editable targets + per-holding thesis (the discipline layer)
+// ============================================================================
+function escClose(e){ if (e.key === "Escape") closeModal(); }
+function closeModal(){
+  const h = document.getElementById("modalHost");
+  if (h) h.innerHTML = "";
+  document.removeEventListener("keydown", escClose);
+}
+function openModal(html){
+  const h = document.getElementById("modalHost");
+  h.innerHTML = `<div class="overlay" id="ov">${html}</div>`;
+  document.getElementById("ov").addEventListener("mousedown", e => { if (e.target.id === "ov") closeModal(); });
+  document.addEventListener("keydown", escClose);
+}
+
+function openTargetsModal(){
+  const t = state.settings ?? { core_min_pct:50, satellite_max_pct:25, fun_max_pct:5, per_name_cap_pct:10 };
+  openModal(`
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="Edit allocation targets">
+      <h3>Allocation targets</h3>
+      <p class="hint">Your discipline rails, as a percent of total value. Drift against these
+        is flagged, not acted on — you trade in T212.</p>
+      <div class="grid2">
+        <div class="field"><label for="t_core">Core floor ≥ (%)</label>
+          <input type="number" id="t_core" min="0" max="100" step="1" value="${t.core_min_pct}">
+          <div class="sub">Global tracker minimum</div></div>
+        <div class="field"><label for="t_sat">Satellite cap ≤ (%)</label>
+          <input type="number" id="t_sat" min="0" max="100" step="1" value="${t.satellite_max_pct}">
+          <div class="sub">Researched sleeve</div></div>
+        <div class="field"><label for="t_fun">Fun cap ≤ (%)</label>
+          <input type="number" id="t_fun" min="0" max="100" step="1" value="${t.fun_max_pct}">
+          <div class="sub">Money you can lose</div></div>
+        <div class="field"><label for="t_name">Per-name cap ≤ (%)</label>
+          <input type="number" id="t_name" min="0" max="100" step="1" value="${t.per_name_cap_pct}">
+          <div class="sub">Single-position ceiling</div></div>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn-ghost" id="t_cancel">Cancel</button>
+        <button class="btn-primary" id="t_save">Save targets</button>
+      </div>
+    </div>`);
+  document.getElementById("t_cancel").addEventListener("click", closeModal);
+  document.getElementById("t_save").addEventListener("click", saveTargets);
+}
+async function saveTargets(){
+  const num = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : Math.max(0, Math.min(100, v)); };
+  const btn = document.getElementById("t_save"); btn.disabled = true; btn.textContent = "Saving…";
+  const row = {
+    user_id: state.session.user.id,
+    core_min_pct: num("t_core"), satellite_max_pct: num("t_sat"),
+    fun_max_pct: num("t_fun"), per_name_cap_pct: num("t_name"),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from("inv_settings").upsert(row);
+  if (error) { btn.disabled = false; btn.textContent = "Save targets"; alert("Couldn't save targets: " + error.message); return; }
+  state.settings = row;
+  closeModal(); render();
+}
+
+function openThesisModal(ticker){
+  const t = state.theses[ticker] ?? {};
+  const locked = /^VWRP/i.test(ticker);              // core tracker is fixed
+  const sleeve = locked ? "core" : (t.sleeve ?? "satellite");
+  openModal(`
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="Edit thesis for ${esc(ticker)}">
+      <h3>${esc(ticker)}</h3>
+      <p class="hint">Why you own it — and the concrete thing that would tell you you're wrong.
+        Written once, surfaced here and again before you consider selling.</p>
+      <div class="field">
+        <label>Sleeve</label>
+        <div class="seg" id="seg">
+          ${["core","satellite","fun"].map(s =>
+            `<button type="button" data-sleeve="${s}" class="${s===sleeve?"on":""}"${locked?" disabled":""}>${s[0].toUpperCase()+s.slice(1)}</button>`).join("")}
+        </div>
+        ${locked ? `<div class="sub">VWRP is always your core holding.</div>` : ""}
+      </div>
+      <div class="field">
+        <label for="th_thesis">Thesis</label>
+        <textarea id="th_thesis" placeholder="In a sentence or two: why does this belong in the portfolio?">${esc(t.thesis)}</textarea>
+      </div>
+      <div class="field">
+        <label for="th_wrong">What would prove me wrong</label>
+        <textarea id="th_wrong" placeholder="The specific thing that would break the thesis and mean it's time to exit.">${esc(t.prove_me_wrong)}</textarea>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn-ghost" id="th_cancel">Cancel</button>
+        <button class="btn-primary" id="th_save">Save</button>
+      </div>
+    </div>`);
+  let chosen = sleeve;
+  document.querySelectorAll("#seg button").forEach(b => b.addEventListener("click", () => {
+    if (b.disabled) return;
+    chosen = b.dataset.sleeve;
+    document.querySelectorAll("#seg button").forEach(x => x.classList.toggle("on", x === b));
+  }));
+  document.getElementById("th_cancel").addEventListener("click", closeModal);
+  document.getElementById("th_save").addEventListener("click", () => saveThesis(ticker, () => chosen));
+}
+async function saveThesis(ticker, getSleeve){
+  const btn = document.getElementById("th_save"); btn.disabled = true; btn.textContent = "Saving…";
+  const row = {
+    user_id: state.session.user.id, ticker,
+    sleeve: getSleeve(),
+    thesis: document.getElementById("th_thesis").value.trim() || null,
+    prove_me_wrong: document.getElementById("th_wrong").value.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from("inv_theses").upsert(row, { onConflict: "user_id,ticker" });
+  if (error) { btn.disabled = false; btn.textContent = "Save"; alert("Couldn't save thesis: " + error.message); return; }
+  state.theses[ticker] = row;
+  closeModal(); render();
 }
 
 // ============================================================================

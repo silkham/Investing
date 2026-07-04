@@ -19,11 +19,17 @@ returns real ISA data end-to-end: T212 positions + account summary through a
 read-only proxy, allocation/drift rails, and FX conversion of non-GBP holdings to
 GBP via keyless ECB rates. FX is deployed and shape-verified but not yet eyeballed
 against live data in-browser. v0.1 (read-only dashboard) is functionally complete.
+The v0.2 discipline layer has started: allocation targets are now editable in-app
+(modal → `inv_settings`) and each holding has a thesis / "what would prove me wrong" /
+sleeve editor (modal → `inv_theses`); the sleeve you assign drives the drift model.
+PWA install icons are in place. (v0.2 UI is code-verified but not yet eyeballed in a
+live browser — same login blocker as FX.)
 
 ## Roadmap
 - [ ] Verify FX in-browser against live ISA data (US names' GBP value, satellite %, ccy badge)
-- [ ] Add PWA icons `icon-192.png` / `icon-512.png` (manifest references them; missing)
-- [ ] v0.2: editable allocation targets + per-holding thesis UI (schema already exists)
+- [x] Add PWA icons `icon-192.png` / `icon-512.png` (maskable, allocation-rail motif on theme green)
+- [x] v0.2: editable allocation targets + per-holding thesis UI (targets modal → inv_settings;
+      per-holding thesis/"prove me wrong"/sleeve modal → inv_theses)
 - [ ] v0.2: cost & turnover tracker + trade log
 - [ ] v0.3: research enrichment per held ticker (consensus, earnings, insider activity)
 
