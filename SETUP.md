@@ -34,13 +34,15 @@ supabase secrets set --project-ref wqkhjbmsciuhwdqsdsni \
 automatically — you do NOT set those.
 
 ### Trading 212 key — safety
-- **Use a READ-only key.** This app never calls any order/cancel endpoint, but the
-  key itself should be scoped to read.
-- Enable **IP restriction** on the key in T212 settings.
-- Auth scheme: the code uses HTTP Basic (`Base64(KEY:SECRET)`) per the project brief.
-  Some T212 docs show a bare `Authorization: <apiKey>` header instead — if the proxy
-  returns 401 with real keys, switch `t212AuthHeader()` in
-  `supabase/functions/t212-proxy/index.ts` accordingly.
+- **Use a READ-only key** (no order-execution scope). This app never calls any
+  order/cancel endpoint, and the key should be scoped to read as defence-in-depth.
+- **IP restriction is NOT practical here.** The API is called by the Supabase Edge
+  Function (Supabase's cloud), not your device, and free-tier functions have no stable
+  egress IP to pin. Restricting to your home IP would break the app. Read-only scope is
+  the real protection.
+- Auth scheme: **HTTP Basic (`Base64(KEY:SECRET)`) — confirmed working** against the
+  live API (2026-07-04). Defined in `t212AuthHeader()` in
+  `supabase/functions/t212-proxy/index.ts`.
 
 ## 4. Configure the client
 In **`index.html`**, replace the two placeholders near the top of the `<script>`:

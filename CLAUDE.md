@@ -160,12 +160,27 @@ Project is currently INACTIVE; resume before deploying.
   "last updated" stamp. Placeholders `__SUPABASE_URL__` / `__SUPABASE_ANON_KEY__`.
 - `manifest.webmanifest`, `SETUP.md` (deploy + secrets + safety steps).
 
-**Next steps:**
-1. Follow `SETUP.md`: resume `realestate`, `db push`, deploy `t212-proxy`, set
-   T212 secrets, fill client placeholders, create the single auth user.
-2. Verify T212 auth scheme with real keys (Basic vs bare header — see SETUP note)
-   and confirm actual response field names, adjust `normalizePositions` / summary map.
-3. v0.2: editable targets + thesis UI (schema already exists).
+**DEPLOYED & VERIFIED (2026-07-04):** backend is live on `realestate` and the full
+pipeline returns real ISA data end-to-end.
+- Schema applied (RLS on all 3 `inv_` tables). Function `t212-proxy` deployed.
+  Client wired with URL + anon key. T212 secrets set. Auth user exists
+  (`lachlanmclean1990@gmail.com`) and signs in.
+- **T212 auth scheme CONFIRMED = HTTP Basic** (`Base64(KEY:SECRET)`) — works, no 401.
+- **T212 response fields CONFIRMED:**
+  - summary (`/equity/account/cash`): `total, invested, free, ppl, blocked, pieCash`.
+    total = invested + blocked + ppl; `free` = cash.
+  - positions (`/equity/portfolio`): array of `{ticker, quantity, averagePrice,
+    currentPrice, ppl, fxPpl, ...}`. No GBP `value` field — we compute qty×price.
 
-**Landmine:** T212 field names in `normalizePositions()` and the summary mapping in
-`renderDashboard()` are best-guess — confirm against a live response before trusting.
+**Landmines:**
+- **Currency:** `/equity/portfolio` prices are in each instrument's NATIVE currency.
+  `VWRPl_EQ` is GBP (core, fine); US names like `FB_US_EQ` are USD. `normalizePositions()`
+  computes value = qty×price with NO FX conversion, so non-GBP holdings' value and
+  allocation % are off. Fix: add USD→GBP FX (Twelve Data) before trusting satellite %.
+- Restoring a paused free-tier project can come back on a bad PG build
+  (`supautils.so: undefined symbol`) — a project **restart** cleared it. Not our bug.
+
+**Next steps:**
+1. Add FX conversion so US holdings show correct GBP value/allocation.
+2. Host on GitHub Pages (currently local-only). Add PWA icons (192/512).
+3. v0.2: editable targets + thesis UI (schema already exists).
