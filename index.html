@@ -80,6 +80,9 @@
   .holdings td { padding: 12px 0; border-top: 1px solid var(--line); text-align:right; font-size:14px; }
   .holdings td.tk { font-weight:600; }
   .holdings td .sub { display:block; font-size:12px; color:var(--muted); font-weight:400; }
+  .holdings td.tk .ccy { margin-left:6px; padding:1px 5px; border:1px solid var(--line); border-radius:5px;
+                         font-size:10px; font-weight:600; color:var(--muted); vertical-align:1px; }
+  .fxnote { font-size:12px; margin-top:10px; }
 
   /* ---- Allocation rails (signature element) ---- */
   .rail-row { margin-bottom: 18px; }
@@ -133,7 +136,8 @@ const signed = (n) => (n == null || isNaN(n)) ? "—" :
 const timeHHMM = (iso) => { try { return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); } catch { return "—"; } };
 
 // ---- App state ----
-const state = { session:null, summary:null, positions:[], settings:null, theses:{}, stamp:null, offline:!navigator.onLine };
+const state = { session:null, summary:null, positions:[], settings:null, theses:{},
+                instruments:{}, fx:{}, fxDate:null, stamp:null, offline:!navigator.onLine };
 window.addEventListener("online",  () => { state.offline=false; render(); });
 window.addEventListener("offline", () => { state.offline=true;  render(); });
 
@@ -153,26 +157,53 @@ async function loadDiscipline() {
 
 async function loadPortfolio() {
   if (!sb || !state.session) return;
-  const { data, error } = await sb.functions.invoke("t212-proxy", { body: { want:["summary","positions"] } });
-  if (error) { console.warn("t212-proxy:", error.message); return; }
-  if (data?.summary?.data)   { state.summary   = data.summary.data;  state.stamp = data.summary.fetched_at; }
-  if (data?.positions?.data) { state.positions = normalizePositions(data.positions.data); }
+  // T212 (value/positions/currency) + FX rates in parallel.
+  const [t212, fx] = await Promise.all([
+    sb.functions.invoke("t212-proxy", { body: { want:["summary","positions","instruments"] } }),
+    sb.functions.invoke("fx-proxy", { body: {} }),
+  ]);
+  // FX first, so normalizePositions() can convert to GBP.
+  if (fx.error) console.warn("fx-proxy:", fx.error.message);
+  if (fx.data?.rates) { state.fx = fx.data.rates; state.fxDate = fx.data.date; }
+
+  const d = t212.data;
+  if (t212.error) { console.warn("t212-proxy:", t212.error.message); return; }
+  if (d?.instruments?.data) state.instruments = d.instruments.data;
+  if (d?.summary?.data)   { state.summary   = d.summary.data;  state.stamp = d.summary.fetched_at; }
+  if (d?.positions?.data) { state.positions = normalizePositions(d.positions.data); }
 }
 
-// Defensive: T212 field names vary; map what we find.
+// Convert an amount in `ccy` to GBP using ECB rates (base GBP: 1 GBP = rate·ccy).
+// Falls back to the native amount if the currency/rate is unknown, so a failed
+// FX load degrades gracefully rather than blanking every foreign holding.
+function toGBP(amount, ccy) {
+  if (amount == null) return null;
+  if (!ccy || ccy === "GBP") return amount;
+  if (ccy === "GBX" || ccy === "GBp") return amount / 100; // pence → pounds
+  const rate = state.fx?.[ccy];
+  return rate ? amount / rate : amount;
+}
+
+// Defensive: T212 field names vary; map what we find. Prices/avg are in each
+// instrument's NATIVE currency (from the instruments map) → convert to GBP.
 function normalizePositions(raw) {
   const arr = Array.isArray(raw) ? raw : (raw?.positions ?? []);
   return arr.map(p => {
+    const ticker = p.ticker ?? p.instrument ?? "—";
     const qty = p.quantity ?? p.qty ?? 0;
     const price = p.currentPrice ?? p.price ?? null;
-    const value = p.value ?? (price != null ? qty * price : null);
+    const avg = p.averagePrice ?? p.avgPrice ?? null;
+    const ccy = state.instruments[ticker] ?? null;
+    const foreign = !!ccy && ccy !== "GBP" && ccy !== "GBX" && ccy !== "GBp";
     return {
-      ticker: p.ticker ?? p.instrument ?? "—",
+      ticker,
       qty,
-      avg: p.averagePrice ?? p.avgPrice ?? null,
-      price,
-      value,
-      ppl: p.ppl ?? p.unrealisedPnl ?? null,
+      ccy,
+      foreign,
+      avg: toGBP(avg, ccy),
+      price: toGBP(price, ccy),
+      value: price != null ? toGBP(qty * price, ccy) : null,
+      ppl: p.ppl ?? p.unrealisedPnl ?? null, // already in GBP (account currency)
     };
   });
 }
@@ -288,15 +319,19 @@ function renderHoldings() {
   }
   const rows = state.positions.map(p => `
     <tr>
-      <td class="tk">${p.ticker}<span class="sub">${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
+      <td class="tk">${p.ticker}${p.foreign?`<span class="ccy">${p.ccy}</span>`:""}<span class="sub">${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
       <td class="num">${fmtGBP(p.value)}</td>
       <td class="num ${p.ppl>=0?'pos':'neg'}">${signed(p.ppl)}</td>
     </tr>`).join("");
+  const anyForeign = state.positions.some(p => p.foreign);
+  const fxNote = anyForeign
+    ? `<div class="muted fxnote">Foreign holdings converted to GBP at ECB reference rates${state.fxDate?` (${state.fxDate})`:""}.</div>`
+    : "";
   return `
     <table class="holdings">
       <thead><tr><th>Holding</th><th>Value</th><th>Unrealised P/L</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>${fxNote}`;
 }
 
 function renderAllocation() {

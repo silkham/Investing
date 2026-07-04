@@ -16,11 +16,17 @@ supabase link --project-ref wqkhjbmsciuhwdqsdsni
 supabase db push
 ```
 
-## 2. Deploy the T212 proxy Edge Function
+## 2. Deploy the Edge Functions
 
 ```bash
 supabase functions deploy t212-proxy --project-ref wqkhjbmsciuhwdqsdsni
+supabase functions deploy fx-proxy   --project-ref wqkhjbmsciuhwdqsdsni
 ```
+
+`fx-proxy` needs **no secret** — it fetches keyless ECB rates from Frankfurter
+(https://frankfurter.dev) to convert non-GBP holdings (e.g. US names in USD) to
+GBP. `t212-proxy` also serves an `instruments` map (ticker → currency) used for
+that conversion.
 
 ## 3. Set the server-side secrets (NEVER in the client)
 

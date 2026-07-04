@@ -172,15 +172,28 @@ pipeline returns real ISA data end-to-end.
   - positions (`/equity/portfolio`): array of `{ticker, quantity, averagePrice,
     currentPrice, ppl, fxPpl, ...}`. No GBP `value` field — we compute qty×price.
 
+**FX conversion — DONE (2026-07-04):** non-GBP holdings now convert to GBP.
+- `fx-proxy` Edge Function: keyless ECB rates from Frankfurter (base=GBP), cached
+  12h in `inv_api_cache` (key `fx:gbp`, source `frankfurter`), JWT-verified. No secret.
+- `t212-proxy` gained a read-only `instruments` endpoint (`/equity/metadata/instruments`),
+  reduced server-side to a compact `{ticker: currencyCode}` map (raw is ~5MB), cached 24h
+  (key `t212:instruments_ccy`). AUTHORITATIVE currency per holding — do NOT parse currency
+  from ticker suffixes.
+- Client `toGBP(amount, ccy)`: GBP→as-is; GBX/GBp→÷100 (pence); else ÷rate. `ppl` left
+  untouched (already GBP). Foreign rows show a ccy badge + ECB-rate note.
+- NOTE: deployed & shape-verified (Frankfurter payload, rate direction), but NOT yet
+  eyeballed against live ISA data in-browser (sandbox blocks the static server; needs login).
+
 **Landmines:**
-- **Currency:** `/equity/portfolio` prices are in each instrument's NATIVE currency.
-  `VWRPl_EQ` is GBP (core, fine); US names like `FB_US_EQ` are USD. `normalizePositions()`
-  computes value = qty×price with NO FX conversion, so non-GBP holdings' value and
-  allocation % are off. Fix: add USD→GBP FX (Twelve Data) before trusting satellite %.
+- **Currency (mostly handled):** conversion needs both the T212 `instruments` map and the
+  Frankfurter rates loaded before `normalizePositions()` runs (they are, in `loadPortfolio`).
+  If either fails, foreign values silently fall back to NATIVE (wrong but not blank) — the
+  ccy badge on a row confirms conversion actually happened.
 - Restoring a paused free-tier project can come back on a bad PG build
   (`supautils.so: undefined symbol`) — a project **restart** cleared it. Not our bug.
 
 **Next steps:**
-1. Add FX conversion so US holdings show correct GBP value/allocation.
+1. Verify FX in-browser against live ISA data (run locally in a real terminal + sign in);
+   confirm US names' GBP value and satellite % look right and the ccy badge shows.
 2. Host on GitHub Pages (currently local-only). Add PWA icons (192/512).
 3. v0.2: editable targets + thesis UI (schema already exists).

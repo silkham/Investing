@@ -14,9 +14,28 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const T212_BASE = "https://live.trading212.com/api/v0";
 
 // Only these read endpoints may ever be called. No order/cancel paths exist here.
+// `reduce` (optional) shrinks a large upstream payload before we cache/return it.
 const ENDPOINTS = {
   summary:   { path: "/equity/account/cash", cacheKey: "t212:summary",   ttl: 60 },
   positions: { path: "/equity/portfolio",    cacheKey: "t212:positions", ttl: 60 },
+  // Instrument metadata. Read-only (never build tickers by hand — CLAUDE.md).
+  // The raw payload is ~5MB, so we reduce it to a compact { ticker: currencyCode }
+  // map: all the client needs to convert native prices to GBP. Rate-limited
+  // (~50s) upstream, so cache for 24h.
+  instruments: {
+    path: "/equity/metadata/instruments",
+    cacheKey: "t212:instruments_ccy",
+    ttl: 24 * 60 * 60,
+    reduce: (raw: unknown): Record<string, string> => {
+      const out: Record<string, string> = {};
+      if (Array.isArray(raw)) {
+        for (const i of raw) {
+          if (i?.ticker && i?.currencyCode) out[i.ticker] = i.currencyCode;
+        }
+      }
+      return out;
+    },
+  },
 } as const;
 
 type Which = keyof typeof ENDPOINTS;
@@ -73,7 +92,9 @@ Deno.serve(async (req) => {
   const result: Record<string, unknown> = {};
 
   for (const which of want) {
-    const { path, cacheKey, ttl } = ENDPOINTS[which];
+    const cfg = ENDPOINTS[which];
+    const { path, cacheKey, ttl } = cfg;
+    const reduce = "reduce" in cfg ? cfg.reduce : undefined;
 
     // 1) Serve fresh cache if within TTL.
     const { data: cached } = await admin
@@ -107,7 +128,8 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const payload = await resp.json();
+      const raw = await resp.json();
+      const payload = reduce ? reduce(raw) : raw;
       const fetched_at = new Date().toISOString();
 
       // 3) Write-through to cache.
