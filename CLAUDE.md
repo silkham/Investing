@@ -144,9 +144,16 @@ link their public output — clearly walled off and labelled "opinion, not data.
 
 ## State / next steps
 
-**Backend decision:** reuse the existing **`realestate`** Supabase project
-(ref `wqkhjbmsciuhwdqsdsni`) — all tables namespaced `inv_` to avoid collisions.
-Project is currently INACTIVE; resume before deploying.
+**Backend:** reuse the existing **`realestate`** Supabase project
+(ref `wqkhjbmsciuhwdqsdsni`, ACTIVE_HEALTHY) — all tables namespaced `inv_` to
+avoid collisions. Deploy functions with
+`supabase functions deploy <name> --project-ref wqkhjbmsciuhwdqsdsni`.
+
+**Hosting (live):** repo is **PUBLIC** on GitHub — `github.com/silkham/Investing`
+(`origin`, `main` tracks `origin/main`). Served via **GitHub Pages** from `main`/root
+at **https://silkham.github.io/Investing/**; a push to `main` auto-deploys. Pages
+required a public repo (free plan). Manifest/assets are referenced RELATIVELY so they
+resolve under the `/Investing/` subpath — keep them relative.
 
 **Done (v0.1 scaffold, local only — nothing deployed, placeholders for keys):**
 - `git init`, `.gitignore` (secrets ignored).
@@ -189,11 +196,13 @@ pipeline returns real ISA data end-to-end.
   Frankfurter rates loaded before `normalizePositions()` runs (they are, in `loadPortfolio`).
   If either fails, foreign values silently fall back to NATIVE (wrong but not blank) — the
   ccy badge on a row confirms conversion actually happened.
+- **Repo is PUBLIC.** Never commit any secret — only the public-safe Supabase anon
+  key belongs in the client. All third-party keys stay as Edge Function secrets.
 - Restoring a paused free-tier project can come back on a bad PG build
   (`supautils.so: undefined symbol`) — a project **restart** cleared it. Not our bug.
 
 **Next steps:**
-1. Verify FX in-browser against live ISA data (run locally in a real terminal + sign in);
+1. Verify FX in-browser against live ISA data (open the hosted URL + sign in);
    confirm US names' GBP value and satellite % look right and the ccy badge shows.
-2. Host on GitHub Pages (currently local-only). Add PWA icons (192/512).
+2. Add PWA icons `icon-192.png` / `icon-512.png` (manifest references them; missing).
 3. v0.2: editable targets + thesis UI (schema already exists).
