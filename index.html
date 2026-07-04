@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2F5D50" />
+<link rel="manifest" href="manifest.webmanifest" />
+<title>Portfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ---- Palette (calm morning dashboard, not a trading terminal) ---- */
+  :root {
+    --bg:      #FAFAF7;   /* paper */
+    --surface: #FFFFFF;
+    --ink:     #191C19;   /* near-black */
+    --muted:   #6C7269;   /* secondary text */
+    --line:    #ECEBE4;   /* hairlines */
+    --accent:  #2F5D50;   /* deep muted green */
+    --pos:     #2F6F4F;   /* gain */
+    --neg:     #A6483C;   /* loss (muted brick, not alarm-red) */
+    --warn:    #B07A2E;   /* drift / over-concentration flag */
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#14171400; --bg:#121412; --surface:#1B1E1B; --ink:#EDEEEA;
+      --muted:#9AA096; --line:#2A2E2A; --accent:#7FB59F;
+      --pos:#7FB59F; --neg:#D68B7E; --warn:#D6AE6E;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 20px 64px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+  .muted { color: var(--muted); }
+  button { font-family: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  /* ---- Header ---- */
+  header.top { display:flex; align-items:baseline; justify-content:space-between; margin-bottom: 28px; }
+  header.top h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; margin:0; }
+  .stamp { font-size: 12px; }
+  .stamp button {
+    background:none; border:1px solid var(--line); color:var(--muted);
+    border-radius: 999px; padding: 3px 10px; font-size: 12px;
+  }
+
+  /* ---- Summary tiles ---- */
+  .summary { display:grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line);
+             border:1px solid var(--line); border-radius: var(--radius); overflow:hidden; margin-bottom: 32px; }
+  @media (min-width: 620px){ .summary { grid-template-columns: repeat(4, 1fr); } }
+  .tile { background: var(--surface); padding: 18px 18px 16px; }
+  .tile .k { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .tile .v { font-size: 22px; font-weight: 600; }
+
+  /* ---- Section ---- */
+  section { margin-bottom: 40px; }
+  section > h2 { font-size: 13px; font-weight:600; text-transform: uppercase;
+                 letter-spacing:.06em; color: var(--muted); margin: 0 0 14px; }
+
+  /* ---- Holdings table ---- */
+  .holdings { width:100%; border-collapse: collapse; }
+  .holdings th { text-align:right; font-size:11px; font-weight:600; color:var(--muted);
+                 text-transform:uppercase; letter-spacing:.05em; padding:0 0 10px; }
+  .holdings th:first-child, .holdings td:first-child { text-align:left; }
+  .holdings td { padding: 12px 0; border-top: 1px solid var(--line); text-align:right; font-size:14px; }
+  .holdings td.tk { font-weight:600; }
+  .holdings td .sub { display:block; font-size:12px; color:var(--muted); font-weight:400; }
+
+  /* ---- Allocation rails (signature element) ---- */
+  .rail-row { margin-bottom: 18px; }
+  .rail-head { display:flex; justify-content:space-between; font-size:13px; margin-bottom:7px; }
+  .rail-head .lbl { font-weight:500; }
+  .rail { position:relative; height:8px; background:var(--line); border-radius:999px; }
+  .rail .fill { position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:var(--accent); }
+  .rail .fill.over { background: var(--warn); }
+  .rail .target { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink); opacity:.55; }
+  .flag { display:inline-block; margin-top:6px; font-size:12px; color:var(--warn); }
+
+  /* ---- Cards / states ---- */
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:22px; }
+  .empty { color:var(--muted); font-size:14px; }
+  .banner { background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--warn);
+            border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:20px; color:var(--muted); }
+
+  /* ---- Auth ---- */
+  .auth { min-height: 80vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; }
+  .auth form { display:flex; flex-direction:column; gap:10px; width:min(320px, 90vw); }
+  .auth input { font:inherit; padding:11px 13px; border:1px solid var(--line); border-radius:10px;
+                background:var(--surface); color:var(--ink); }
+  .auth button { padding:11px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-weight:600; }
+  .auth .err { color:var(--neg); font-size:13px; min-height: 1em; }
+  .brand { font-size:20px; font-weight:700; letter-spacing:-.01em; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><!-- rendered by JS --></div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// ============================================================================
+// CONFIG — placeholders. Fill from the `realestate` Supabase project settings.
+// The anon key is public-safe (RLS enforces access); it is NOT a secret.
+// See SETUP.md.
+// ============================================================================
+const SUPABASE_URL = "https://wqkhjbmsciuhwdqsdsni.supabase.co";
+const SUPABASE_ANON_KEY = "__SUPABASE_ANON_KEY__";
+
+const CONFIGURED = !SUPABASE_URL.startsWith("__");
+const sb = CONFIGURED ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const app = document.getElementById("app");
+const fmtGBP = (n) => (n == null || isNaN(n)) ? "—" :
+  new Intl.NumberFormat("en-GB", { style:"currency", currency:"GBP", maximumFractionDigits:0 }).format(n);
+const fmtPct = (n) => (n == null || isNaN(n)) ? "—" : `${n.toFixed(1)}%`;
+const signed = (n) => (n == null || isNaN(n)) ? "—" :
+  (n >= 0 ? "+" : "−") + fmtGBP(Math.abs(n)).replace("£","£");
+const timeHHMM = (iso) => { try { return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}); } catch { return "—"; } };
+
+// ---- App state ----
+const state = { session:null, summary:null, positions:[], settings:null, theses:{}, stamp:null, offline:!navigator.onLine };
+window.addEventListener("online",  () => { state.offline=false; render(); });
+window.addEventListener("offline", () => { state.offline=true;  render(); });
+
+// ============================================================================
+// Data layer
+// ============================================================================
+async function loadDiscipline() {
+  if (!sb || !state.session) return;
+  const uid = state.session.user.id;
+  const [{ data: settings }, { data: theses }] = await Promise.all([
+    sb.from("inv_settings").select("*").eq("user_id", uid).maybeSingle(),
+    sb.from("inv_theses").select("ticker, sleeve, thesis, prove_me_wrong").eq("user_id", uid),
+  ]);
+  state.settings = settings ?? { core_min_pct:50, satellite_max_pct:25, fun_max_pct:5, per_name_cap_pct:10 };
+  state.theses = Object.fromEntries((theses ?? []).map(t => [t.ticker, t]));
+}
+
+async function loadPortfolio() {
+  if (!sb || !state.session) return;
+  const { data, error } = await sb.functions.invoke("t212-proxy", { body: { want:["summary","positions"] } });
+  if (error) { console.warn("t212-proxy:", error.message); return; }
+  if (data?.summary?.data)   { state.summary   = data.summary.data;  state.stamp = data.summary.fetched_at; }
+  if (data?.positions?.data) { state.positions = normalizePositions(data.positions.data); }
+}
+
+// Defensive: T212 field names vary; map what we find.
+function normalizePositions(raw) {
+  const arr = Array.isArray(raw) ? raw : (raw?.positions ?? []);
+  return arr.map(p => {
+    const qty = p.quantity ?? p.qty ?? 0;
+    const price = p.currentPrice ?? p.price ?? null;
+    const value = p.value ?? (price != null ? qty * price : null);
+    return {
+      ticker: p.ticker ?? p.instrument ?? "—",
+      qty,
+      avg: p.averagePrice ?? p.avgPrice ?? null,
+      price,
+      value,
+      ppl: p.ppl ?? p.unrealisedPnl ?? null,
+    };
+  });
+}
+
+// ---- Allocation model: sleeve breakdown + concentration ----
+function sleeveOf(ticker) {
+  if (/^VWRP/i.test(ticker)) return "core";           // global tracker
+  return state.theses[ticker]?.sleeve ?? "satellite"; // default unclassified → satellite
+}
+function allocation() {
+  const total = state.positions.reduce((s,p) => s + (p.value ?? 0), 0);
+  const sleeves = { core:0, satellite:0, fun:0 };
+  const byName = [];
+  for (const p of state.positions) {
+    const s = sleeveOf(p.ticker);
+    sleeves[s] = (sleeves[s] ?? 0) + (p.value ?? 0);
+    if (p.value) byName.push({ ticker:p.ticker, pct: total ? p.value/total*100 : 0 });
+  }
+  const pct = (v) => total ? v/total*100 : 0;
+  return { total, pct: { core:pct(sleeves.core), satellite:pct(sleeves.satellite), fun:pct(sleeves.fun) }, byName };
+}
+
+// ============================================================================
+// Render
+// ============================================================================
+function render() {
+  if (!CONFIGURED) return renderNeedsConfig();
+  if (!state.session) return renderAuth();
+  renderDashboard();
+}
+
+function renderNeedsConfig() {
+  app.innerHTML = `
+    <div class="auth">
+      <div class="brand">Portfolio</div>
+      <div class="card empty" style="max-width:420px;text-align:center">
+        Not configured yet. Add your Supabase URL and anon key to <b>index.html</b>
+        (see <b>SETUP.md</b>), then reload.
+      </div>
+    </div>`;
+}
+
+function renderAuth() {
+  app.innerHTML = `
+    <div class="auth">
+      <div class="brand">Portfolio</div>
+      <div class="muted" style="font-size:13px">Sign in to your dashboard</div>
+      <form id="loginForm">
+        <input id="email" type="email" placeholder="Email" autocomplete="username" required />
+        <input id="password" type="password" placeholder="Password" autocomplete="current-password" required />
+        <button type="submit">Sign in</button>
+        <div class="err" id="authErr"></div>
+      </form>
+    </div>`;
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("authErr");
+    err.textContent = "";
+    const { error } = await sb.auth.signInWithPassword({
+      email: document.getElementById("email").value,
+      password: document.getElementById("password").value,
+    });
+    if (error) err.textContent = error.message;
+  });
+}
+
+function renderDashboard() {
+  const s = state.summary ?? {};
+  const total = s.total ?? s.value ?? null;
+  const invested = s.invested ?? s.pieCash ?? null;
+  const cash = s.free ?? s.cash ?? null;
+  const ppl = s.ppl ?? s.result ?? null;
+
+  const consensusCaveat = ""; // reserved for v0.3 research panels
+
+  app.innerHTML = `
+    <header class="top">
+      <h1>PORTFOLIO</h1>
+      <div class="stamp">
+        <button id="refreshBtn" title="Refresh">
+          ${state.offline ? "Offline · " : ""}Updated ${state.stamp ? timeHHMM(state.stamp) : "—"} ↻
+        </button>
+      </div>
+    </header>
+
+    ${state.offline ? `<div class="banner">You're offline. Showing the last cached data.</div>` : ""}
+
+    <div class="summary">
+      <div class="tile"><div class="k">Total value</div><div class="v num">${fmtGBP(total)}</div></div>
+      <div class="tile"><div class="k">Invested</div><div class="v num">${fmtGBP(invested)}</div></div>
+      <div class="tile"><div class="k">Cash</div><div class="v num">${fmtGBP(cash)}</div></div>
+      <div class="tile"><div class="k">Unrealised P/L</div>
+        <div class="v num ${ppl>=0?'pos':'neg'}">${signed(ppl)}</div></div>
+    </div>
+
+    <section>
+      <h2>Holdings</h2>
+      ${renderHoldings()}
+    </section>
+
+    <section>
+      <h2>Allocation &amp; drift</h2>
+      ${renderAllocation()}
+    </section>
+  `;
+  document.getElementById("refreshBtn").addEventListener("click", refresh);
+}
+
+function renderHoldings() {
+  if (!state.positions.length) {
+    return `<div class="card empty">No positions yet. Once the T212 proxy is wired, your ISA
+            holdings appear here automatically — no manual entry.</div>`;
+  }
+  const rows = state.positions.map(p => `
+    <tr>
+      <td class="tk">${p.ticker}<span class="sub">${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
+      <td class="num">${fmtGBP(p.value)}</td>
+      <td class="num ${p.ppl>=0?'pos':'neg'}">${signed(p.ppl)}</td>
+    </tr>`).join("");
+  return `
+    <table class="holdings">
+      <thead><tr><th>Holding</th><th>Value</th><th>Unrealised P/L</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderAllocation() {
+  if (!state.positions.length) {
+    return `<div class="card empty">Set your targets and add holdings to see drift against
+            your core / satellite / fun sleeves.</div>`;
+  }
+  const a = allocation();
+  const t = state.settings;
+  const rails = [
+    { key:"core",      label:"Core (global tracker)", actual:a.pct.core,      target:t.core_min_pct,      kind:"floor" },
+    { key:"satellite", label:"Satellite (researched)", actual:a.pct.satellite, target:t.satellite_max_pct, kind:"cap" },
+    { key:"fun",       label:"Fun (can lose)",         actual:a.pct.fun,       target:t.fun_max_pct,       kind:"cap" },
+  ];
+  const railHTML = rails.map(r => {
+    const over = r.kind==="cap"  && r.actual > r.target + 0.05;
+    const under = r.kind==="floor" && r.actual < r.target - 0.05;
+    const breach = over || under;
+    const fillW = Math.min(100, r.actual);
+    const flag = over ? `Over its ${fmtPct(r.target)} cap`
+               : under ? `Below its ${fmtPct(r.target)} floor` : "";
+    return `
+      <div class="rail-row">
+        <div class="rail-head">
+          <span class="lbl">${r.label}</span>
+          <span class="num muted">${fmtPct(r.actual)} <span style="opacity:.6">/ ${r.kind==='cap'?'≤':'≥'} ${fmtPct(r.target)}</span></span>
+        </div>
+        <div class="rail">
+          <div class="fill ${breach?'over':''}" style="width:${fillW}%"></div>
+          <div class="target" style="left:${Math.min(100,r.target)}%"></div>
+        </div>
+        ${flag ? `<span class="flag">⚑ ${flag}</span>` : ""}
+      </div>`;
+  }).join("");
+
+  // Per-name over-concentration
+  const cap = t.per_name_cap_pct;
+  const hot = a.byName.filter(n => n.pct > cap + 0.05).sort((x,y)=>y.pct-x.pct);
+  const concentration = hot.length
+    ? `<div class="flag" style="display:block;margin-top:14px">⚑ Over the ${fmtPct(cap)} per-name cap:
+       ${hot.map(h=>`${h.ticker} (${fmtPct(h.pct)})`).join(", ")}</div>`
+    : "";
+
+  return railHTML + concentration;
+}
+
+// ============================================================================
+// Actions
+// ============================================================================
+async function refresh() {
+  const btn = document.getElementById("refreshBtn");
+  if (btn) btn.disabled = true;
+  await loadPortfolio();
+  render();
+}
+
+async function boot() {
+  render(); // config / auth check first
+  if (!CONFIGURED) return;
+
+  const { data: { session } } = await sb.auth.getSession();
+  state.session = session;
+  sb.auth.onAuthStateChange((_e, sess) => { state.session = sess; init(); });
+  init();
+}
+
+async function init() {
+  render();
+  if (!state.session) return;
+  await loadDiscipline();
+  render();
+  await loadPortfolio();
+  render();
+}
+
+boot();
+</script>
+</body>
+</html>

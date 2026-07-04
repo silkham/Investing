@@ -1,0 +1,15 @@
+# Secrets & local env — NEVER commit
+.env
+.env.*
+*.local
+supabase/.env
+supabase/.branches
+supabase/.temp
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
