@@ -26,6 +26,8 @@ PWA install icons are in place. (v0.2 UI is code-verified but not yet eyeballed 
 live browser — same login blocker as FX.)
 
 ## Roadmap
+- [x] LifeOS hub integration — publish portfolio total as a `lifeos.signals` metric on this
+      project (the cross-app hub reads + merges it). See "LifeOS integration" below.
 - [ ] Verify FX in-browser against live ISA data (US names' GBP value, satellite %, ccy badge)
 - [x] Add PWA icons `icon-192.png` / `icon-512.png` (maskable, allocation-rail motif on theme green)
 - [x] v0.2: editable allocation targets + per-holding thesis UI (targets modal → inv_settings;
@@ -223,6 +225,28 @@ pipeline returns real ISA data end-to-end.
   untouched (already GBP). Foreign rows show a ccy badge + ECB-rate note.
 - NOTE: deployed & shape-verified (Frankfurter payload, rate direction), but NOT yet
   eyeballed against live ISA data in-browser (sandbox blocks the static server; needs login).
+
+**LifeOS integration — DONE (2026-07-14):** this app is a source for the cross-app
+hub (**LifeOS**, `../LifeOS`). It's the ONE app on its own Supabase project, so LifeOS
+can't read it via the shared household DB — instead:
+- `supabase/migrations/0002_lifeos_signals_mirror.sql` creates a `lifeos` schema +
+  `signals` table on THIS project (ref `wqkhjbmsciuhwdqsdsni`), mirroring LifeOS's
+  Project-A contract. Applied via Mgmt API; `lifeos` is exposed to PostgREST here
+  (`db_schema = public,graphql_public,lifeos`). No `household_memberships` on this DB,
+  so RLS is **authenticated-only** (`for all to authenticated using(true)`) — nothing
+  granted to `anon`, so the public anon key CANNOT read the portfolio value (verified:
+  anon REST read → 401 permission denied).
+- `publishToLifeOS()` in `index.html` runs fire-and-forget at the end of
+  `loadPortfolio()`: upserts one `metric` (`app='invest'`, `key='portfolio'`,
+  `value`=total £, `unit='gbp'`, `state='good'|'bad'` by unrealised-P/L sign) via
+  `sb.schema("lifeos").from("signals").upsert(row, {onConflict:"household_id,app,key"})`,
+  authed as the signed-in user. Write-only; LifeOS owns rendering.
+- LifeOS reads it with a second client (`supaB`) that reuses THIS app's Supabase
+  session (shared silkham.github.io origin → default storageKey), so the first real
+  publish + read happens once you're signed in here. Portfolio metric is READ-ONLY
+  from LifeOS. Testing convention (this repo, single-file module): extract the
+  `<script type="module">` block, strip `import`/`export`, `new Function`-parse via jsc
+  (`/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc`).
 
 **Landmines:**
 - **Currency (mostly handled):** conversion needs both the T212 `instruments` map and the

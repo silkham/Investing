@@ -220,6 +220,48 @@ async function loadPortfolio() {
   if (d?.instruments?.data) state.instruments = d.instruments.data;
   if (d?.summary?.data)   { state.summary   = d.summary.data;  state.stamp = d.summary.fetched_at; }
   if (d?.positions?.data) { state.positions = normalizePositions(d.positions.data); }
+  publishToLifeOS();  // fire-and-forget: mirror the portfolio total into lifeos.signals
+}
+
+// ============================================================================
+// LifeOS integration — publish the portfolio total as a `metric` signal.
+// LifeOS is the read-only cross-app hub: it reads this row via its own second
+// Supabase client (this project is the outlier on its own DB) and renders it.
+// We ONLY ever write here; LifeOS owns rendering. Fire-and-forget so a failure
+// (offline, no session, table missing) never blocks or breaks the dashboard.
+// Shared "Our household" id — cosmetic on this DB (no household_memberships), but
+// kept consistent with the other apps' signals for a clean merge.
+// ============================================================================
+const LIFEOS_HOUSEHOLD = "13b5e642-3f21-403c-8336-56976f177269";
+async function publishToLifeOS() {
+  try {
+    if (!sb || !state.session) return;
+    const s = state.summary;
+    const total = s?.total ?? s?.value ?? null;
+    if (total == null) return;                       // nothing meaningful to publish yet
+    const ppl = s?.ppl ?? s?.result ?? null;         // unrealised P/L, already in GBP
+    const up = (ppl ?? 0) >= 0;
+    const detail = ppl == null ? null
+      : `${up ? "+" : "−"}£${Math.abs(ppl).toLocaleString("en-GB", { maximumFractionDigits: 0 })} P/L`;
+    const row = {
+      household_id: LIFEOS_HOUSEHOLD,
+      app: "invest",
+      kind: "metric",
+      key: "portfolio",                              // stable → upsert, never duplicates
+      title: "Portfolio",
+      detail,
+      value: total,
+      unit: "gbp",
+      state: up ? "good" : "bad",                    // up = good for a portfolio
+      cta_url: "https://silkham.github.io/Investing/",
+      cta_label: "Open",
+      status: "open",
+    };
+    await sb.schema("lifeos").from("signals")
+      .upsert(row, { onConflict: "household_id,app,key" });
+  } catch (e) {
+    console.warn("publishToLifeOS:", e?.message || e);
+  }
 }
 
 // Convert an amount in `ccy` to GBP using ECB rates (base GBP: 1 GBP = rate·ccy).
