@@ -28,6 +28,8 @@ live browser — same login blocker as FX.)
 ## Roadmap
 - [x] LifeOS hub integration — publish portfolio total as a `lifeos.signals` metric on this
       project (the cross-app hub reads + merges it). See "LifeOS integration" below.
+- [x] LifeOS server-side hourly refresh — `lifeos-invest-refresh` Edge Function + pg_cron
+      keep the LifeOS Invest tile live while the app is closed. See "LifeOS integration".
 - [ ] Verify FX in-browser against live ISA data (US names' GBP value, satellite %, ccy badge)
 - [x] Add PWA icons `icon-192.png` / `icon-512.png` (maskable, allocation-rail motif on theme green)
 - [x] v0.2: editable allocation targets + per-holding thesis UI (targets modal → inv_settings;
@@ -247,6 +249,31 @@ can't read it via the shared household DB — instead:
   from LifeOS. Testing convention (this repo, single-file module): extract the
   `<script type="module">` block, strip `import`/`export`, `new Function`-parse via jsc
   (`/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc`).
+
+**Server-side hourly refresh — DONE (2026-07-14):** the in-app `publishToLifeOS()`
+only runs on app-open, but the portfolio value moves while the app is closed, so a
+server path keeps the LifeOS tile live:
+- `supabase/functions/lifeos-invest-refresh/index.ts` — Edge Function that fetches
+  the T212 account summary (read-only `/equity/account/cash`, same Basic auth as
+  `t212-proxy`) and upserts the **same** `lifeos.signals` portfolio row
+  `publishToLifeOS()` writes, using the **service_role** client to bypass RLS (no
+  user session in a cron context). Deployed with default **JWT verify ON** — the
+  cron passes the service_role key as the bearer, which is a valid JWT, so it's NOT
+  a public un-authed endpoint (safer than `--no-verify-jwt`).
+- `supabase/migrations/0003_lifeos_invest_cron.sql` — enables `pg_cron` + `pg_net`,
+  grants `service_role` on the `lifeos` schema/table, and schedules
+  `cron.schedule('lifeos-invest-refresh', '0 7-16 * * 1-5', …)` → `net.http_post` to
+  the function. `7-16` UTC deliberately straddles BST/GMT to cover the LSE
+  ~08:00–16:30 local window year-round.
+- **Landmine — service_role needs explicit GRANTs on custom schemas.** RLS bypass ≠
+  grant bypass: `service_role` got `permission denied for schema lifeos` until
+  granted (the 0002 mirror migration only granted `authenticated`). Fixed in 0003.
+- **Secret handling (public repo):** the cron's bearer is the service_role key, which
+  must NOT be committed. It lives in **Supabase Vault** (`vault.create_secret(<key>,
+  'lifeos_service_role_key')`, provisioned out-of-band) and the cron reads it by name
+  via `vault.decrypted_secrets` — the migration file contains no secret. NB: direct
+  `insert into vault.secrets` fails with `permission denied for _crypto_aead_det_noncegen`
+  under the Mgmt-API role; use `vault.create_secret()` (SECURITY DEFINER) instead.
 
 **Landmines:**
 - **Currency (mostly handled):** conversion needs both the T212 `instruments` map and the
