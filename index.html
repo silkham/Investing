@@ -243,7 +243,8 @@ async function publishToLifeOS() {
     const up = (ppl ?? 0) >= 0;
     const detail = ppl == null ? null
       : `${up ? "+" : "−"}£${Math.abs(ppl).toLocaleString("en-GB", { maximumFractionDigits: 0 })} P/L`;
-    const row = {
+    const CTA = "https://silkham.github.io/Investing/";
+    const portfolio = {
       household_id: LIFEOS_HOUSEHOLD,
       app: "invest",
       kind: "metric",
@@ -253,12 +254,46 @@ async function publishToLifeOS() {
       value: total,
       unit: "gbp",
       state: up ? "good" : "bad",                    // up = good for a portfolio
-      cta_url: "https://silkham.github.io/Investing/",
+      cta_url: CTA,
       cta_label: "Open",
       status: "open",
     };
+
+    // Per-holding rows — LifeOS renders these grouped under the portfolio tile.
+    // key='holding-<ticker>'; state good/bad by unrealised P/L (up = good).
+    const holdKey = (tk) => "holding-" + String(tk).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const holdings = (state.positions || [])
+      .filter((p) => p.value != null)
+      .map((p) => {
+        const gain = (p.ppl ?? 0) >= 0;
+        return {
+          household_id: LIFEOS_HOUSEHOLD, app: "invest", kind: "metric",
+          key: holdKey(p.ticker), title: p.ticker,
+          detail: p.ppl == null ? null
+            : `${gain ? "+" : "−"}£${Math.abs(p.ppl).toLocaleString("en-GB", { maximumFractionDigits: 0 })} P/L`,
+          value: p.value, unit: "gbp",
+          state: gain ? "good" : "bad",
+          cta_url: CTA, cta_label: "Open", status: "open",
+        };
+      });
+
     await sb.schema("lifeos").from("signals")
-      .upsert(row, { onConflict: "household_id,app,key" });
+      .upsert([portfolio, ...holdings], { onConflict: "household_id,app,key" });
+
+    // Self-cleaning: a sold holding's row would otherwise linger forever. Dismiss
+    // any published `holding-*` rows we're no longer holding (LifeOS filters
+    // `status='dismissed'`, so they vanish from the hub). Update-in-place — the
+    // rows already exist, so no NOT NULL insert path.
+    const live = new Set(holdings.map((h) => h.key));
+    const { data: existing } = await sb.schema("lifeos").from("signals")
+      .select("key").eq("household_id", LIFEOS_HOUSEHOLD).eq("app", "invest")
+      .like("key", "holding-%").neq("status", "dismissed");
+    const stale = (existing || []).map((r) => r.key).filter((k) => !live.has(k));
+    if (stale.length) {
+      await sb.schema("lifeos").from("signals")
+        .update({ status: "dismissed" })
+        .eq("household_id", LIFEOS_HOUSEHOLD).eq("app", "invest").in("key", stale);
+    }
   } catch (e) {
     console.warn("publishToLifeOS:", e?.message || e);
   }
