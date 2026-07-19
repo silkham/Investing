@@ -19,18 +19,20 @@ const ENDPOINTS = {
   summary:   { path: "/equity/account/cash", cacheKey: "t212:summary",   ttl: 60 },
   positions: { path: "/equity/portfolio",    cacheKey: "t212:positions", ttl: 60 },
   // Instrument metadata. Read-only (never build tickers by hand — CLAUDE.md).
-  // The raw payload is ~5MB, so we reduce it to a compact { ticker: currencyCode }
-  // map: all the client needs to convert native prices to GBP. Rate-limited
-  // (~50s) upstream, so cache for 24h.
+  // The raw payload is ~5MB, so we reduce it to a compact
+  // { ticker: { ccy, name, sym } } map: currency drives GBP conversion, name/sym
+  // give the client a human-friendly label instead of the raw T212 ticker.
+  // Rate-limited (~50s) upstream, so cache for 24h.
   instruments: {
     path: "/equity/metadata/instruments",
-    cacheKey: "t212:instruments_ccy",
+    cacheKey: "t212:instruments_meta",
     ttl: 24 * 60 * 60,
-    reduce: (raw: unknown): Record<string, string> => {
-      const out: Record<string, string> = {};
+    reduce: (raw: unknown): Record<string, { ccy: string; name?: string; sym?: string }> => {
+      const out: Record<string, { ccy: string; name?: string; sym?: string }> = {};
       if (Array.isArray(raw)) {
         for (const i of raw) {
-          if (i?.ticker && i?.currencyCode) out[i.ticker] = i.currencyCode;
+          if (!i?.ticker) continue;
+          out[i.ticker] = { ccy: i.currencyCode, name: i.name, sym: i.shortName };
         }
       }
       return out;

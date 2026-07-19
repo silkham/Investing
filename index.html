@@ -310,6 +310,23 @@ function toGBP(amount, ccy) {
   return rate ? amount / rate : amount;
 }
 
+// Instrument metadata is { ticker: { ccy, name, sym } }. Kept backward-compatible
+// with the old { ticker: "USD" } string shape during a proxy redeploy.
+function instrMeta(ticker) {
+  const m = state.instruments[ticker];
+  if (m == null) return { ccy: null };
+  return typeof m === "string" ? { ccy: m } : m;
+}
+
+// Human-friendly label for a raw T212 ticker (e.g. FB_US_EQ → "Meta Platforms").
+// Prefer the authoritative T212 instrument name; otherwise strip the T212 suffix
+// (_US_EQ / _EQ / _l_EQ …) so it at least reads as a plain symbol, not raw noise.
+function prettyName(ticker) {
+  const name = instrMeta(ticker).name;
+  if (name && name.trim()) return name.trim();
+  return String(ticker).replace(/_[A-Za-z]{1,3}_EQ$/, "").replace(/_EQ$/, "");
+}
+
 // Defensive: T212 field names vary; map what we find. Prices/avg are in each
 // instrument's NATIVE currency (from the instruments map) → convert to GBP.
 function normalizePositions(raw) {
@@ -319,10 +336,13 @@ function normalizePositions(raw) {
     const qty = p.quantity ?? p.qty ?? 0;
     const price = p.currentPrice ?? p.price ?? null;
     const avg = p.averagePrice ?? p.avgPrice ?? null;
-    const ccy = state.instruments[ticker] ?? null;
+    const meta = instrMeta(ticker);
+    const ccy = meta.ccy ?? null;
     const foreign = !!ccy && ccy !== "GBP" && ccy !== "GBX" && ccy !== "GBp";
     return {
       ticker,
+      name: prettyName(ticker),
+      sym: meta.sym ?? null,
       qty,
       ccy,
       foreign,
@@ -462,8 +482,8 @@ function renderHoldings() {
       ? `<span class="thesis-dot" title="Thesis recorded">●</span>`
       : `<span class="addnote">+ note</span>`;
     return `
-    <tr class="clickable" data-ticker="${esc(p.ticker)}" tabindex="0" role="button" aria-label="Edit thesis for ${esc(p.ticker)}">
-      <td class="tk">${p.ticker}${p.foreign?`<span class="ccy">${p.ccy}</span>`:""}${chip}${note}<span class="sub">${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
+    <tr class="clickable" data-ticker="${esc(p.ticker)}" tabindex="0" role="button" aria-label="Edit thesis for ${esc(p.name)}">
+      <td class="tk">${esc(p.name)}${p.foreign?`<span class="ccy">${p.ccy}</span>`:""}${chip}${note}<span class="sub">${esc(p.sym || p.ticker)} · ${p.qty} @ ${p.avg!=null?fmtGBP(p.avg):"—"}</span></td>
       <td class="num">${fmtGBP(p.value)}</td>
       <td class="num ${p.ppl>=0?'pos':'neg'}">${signed(p.ppl)}</td>
     </tr>`; }).join("");
@@ -516,7 +536,7 @@ function renderAllocation() {
   const hot = a.byName.filter(n => n.pct > cap + 0.05).sort((x,y)=>y.pct-x.pct);
   const concentration = hot.length
     ? `<div class="flag" style="display:block;margin-top:14px">⚑ Over the ${fmtPct(cap)} per-name cap:
-       ${hot.map(h=>`${h.ticker} (${fmtPct(h.pct)})`).join(", ")}</div>`
+       ${hot.map(h=>`${esc(prettyName(h.ticker))} (${fmtPct(h.pct)})`).join(", ")}</div>`
     : "";
 
   return railHTML + concentration;
@@ -587,8 +607,8 @@ function openThesisModal(ticker){
   const locked = /^VWRP/i.test(ticker);              // core tracker is fixed
   const sleeve = locked ? "core" : (t.sleeve ?? "satellite");
   openModal(`
-    <div class="dialog" role="dialog" aria-modal="true" aria-label="Edit thesis for ${esc(ticker)}">
-      <h3>${esc(ticker)}</h3>
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="Edit thesis for ${esc(prettyName(ticker))}">
+      <h3>${esc(prettyName(ticker))}<span class="sub" style="display:block;font-size:12px;color:var(--muted);font-weight:400">${esc(ticker)}</span></h3>
       <p class="hint">Why you own it — and the concrete thing that would tell you you're wrong.
         Written once, surfaced here and again before you consider selling.</p>
       <div class="field">
