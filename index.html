@@ -268,7 +268,7 @@ async function publishToLifeOS() {
         const gain = (p.ppl ?? 0) >= 0;
         return {
           household_id: LIFEOS_HOUSEHOLD, app: "invest", kind: "metric",
-          key: holdKey(p.ticker), title: p.ticker,
+          key: holdKey(p.ticker), title: p.name || p.ticker,
           detail: p.ppl == null ? null
             : `${gain ? "+" : "−"}£${Math.abs(p.ppl).toLocaleString("en-GB", { maximumFractionDigits: 0 })} P/L`,
           value: p.value, unit: "gbp",
