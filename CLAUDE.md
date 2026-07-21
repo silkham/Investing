@@ -243,6 +243,12 @@ can't read it via the shared household DB — instead:
   `value`=total £, `unit='gbp'`, `state='good'|'bad'` by unrealised-P/L sign) via
   `sb.schema("lifeos").from("signals").upsert(row, {onConflict:"household_id,app,key"})`,
   authed as the signed-in user. Write-only; LifeOS owns rendering.
+- It **also** upserts one `metric` per holding (`key='holding-<ticker>'`, self-cleaning:
+  sold holdings flip to `dismissed`), which LifeOS groups under a Holdings card. **The
+  `title` MUST be `p.name` (the human company name, e.g. "Meta Platforms"/"Nvidia"), NOT
+  the raw T212 ticker** (`FB_US_EQ`) — fixed 2026-07-21. `p.name` = `prettyName(ticker)`
+  (instrument-metadata name, falling back to the suffix-stripped symbol); the `key` still
+  uses the raw ticker so self-cleaning is unaffected.
 - LifeOS reads it with a second client (`supaB`) that reuses THIS app's Supabase
   session (shared silkham.github.io origin → default storageKey), so the first real
   publish + read happens once you're signed in here. Portfolio metric is READ-ONLY
